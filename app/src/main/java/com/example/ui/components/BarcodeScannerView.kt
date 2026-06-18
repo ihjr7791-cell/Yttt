@@ -60,6 +60,18 @@ fun BarcodeScannerView(
         Box(modifier = Modifier.fillMaxSize()) {
             if (cameraPermissionState.status.isGranted) {
                 val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+                var cameraProviderRef by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+
+                DisposableEffect(Unit) {
+                    onDispose {
+                        try {
+                            cameraProviderRef?.unbindAll()
+                        } catch (e: Exception) {
+                            Log.e("CameraScanner", "Unbinding failed on dispose", e)
+                        }
+                        cameraExecutor.shutdown()
+                    }
+                }
                 
                 AndroidView(
                     factory = { ctx ->
@@ -73,6 +85,7 @@ fun BarcodeScannerView(
                         val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                         cameraProviderFuture.addListener({
                             val cameraProvider = cameraProviderFuture.get()
+                            cameraProviderRef = cameraProvider
 
                             val preview = Preview.Builder().build().apply {
                                 setSurfaceProvider(previewView.surfaceProvider)
