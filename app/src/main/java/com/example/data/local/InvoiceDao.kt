@@ -30,4 +30,16 @@ interface InvoiceDao {
 
     @Query("DELETE FROM invoice_items WHERE invoiceId = :invoiceId")
     suspend fun deleteInvoiceItemsByInvoiceId(invoiceId: Int)
+
+    @Query("SELECT * FROM invoice_items")
+    suspend fun getAllInvoiceItems(): List<InvoiceItem>
+
+    @Query("SELECT * FROM invoice_items")
+    fun getAllInvoiceItemsFlow(): Flow<List<InvoiceItem>>
+
+    @Query("DELETE FROM invoices")
+    suspend fun deleteAllInvoices()
+
+    @Query("DELETE FROM invoice_items")
+    suspend fun deleteAllInvoiceItems()
 }

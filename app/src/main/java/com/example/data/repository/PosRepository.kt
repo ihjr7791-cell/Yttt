@@ -53,4 +53,26 @@ class PosRepository(private val db: AppDatabase) {
         val currentTime = System.currentTimeMillis()
         invoiceDao.markCustomerAsPaid(customerName, currentTime)
     }
+
+    suspend fun getAllInvoiceItems(): List<InvoiceItem> {
+        return invoiceDao.getAllInvoiceItems()
+    }
+
+    fun getAllInvoiceItemsFlow(): Flow<List<InvoiceItem>> {
+        return invoiceDao.getAllInvoiceItemsFlow()
+    }
+
+    suspend fun clearAllData() {
+        productDao.deleteAllProducts()
+        invoiceDao.deleteAllInvoices()
+        invoiceDao.deleteAllInvoiceItems()
+    }
+
+    suspend fun insertInvoiceItemDirectly(item: InvoiceItem) {
+        invoiceDao.insertInvoiceItem(item)
+    }
+
+    suspend fun insertInvoiceDirectly(invoice: Invoice) {
+        invoiceDao.insertInvoice(invoice)
+    }
 }

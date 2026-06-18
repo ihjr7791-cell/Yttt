@@ -43,6 +43,8 @@ fun ProductsScreen(
 
     var searchQuery by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editingProduct by remember { mutableStateOf<Product?>(null) }
 
     // RTL block for Arabic
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -55,21 +57,6 @@ fun ProductsScreen(
 
         Scaffold(
             modifier = modifier.fillMaxSize(),
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Text(
-                            "إدارة وتسعير المنتجات",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                )
-            },
             floatingActionButton = {
                 FloatingActionButton(
                     onClick = { showAddDialog = true },
@@ -198,19 +185,39 @@ fun ProductsScreen(
                                             )
                                         }
 
-                                        IconButton(
-                                            onClick = {
-                                                viewModel.deleteProductById(product.id)
-                                                Toast.makeText(context, "تم حذف منتج ${product.name}", Toast.LENGTH_SHORT).show()
-                                            },
-                                            modifier = Modifier.size(28.dp)
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Delete,
-                                                contentDescription = "حذف المنتج",
-                                                tint = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.size(18.dp)
-                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    editingProduct = product
+                                                    showEditDialog = true
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Edit,
+                                                    contentDescription = "تعديل المنتج",
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+
+                                            IconButton(
+                                                onClick = {
+                                                    viewModel.deleteProductById(product.id)
+                                                    Toast.makeText(context, "تم حذف منتج ${product.name}", Toast.LENGTH_SHORT).show()
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "حذف المنتج",
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
                                         }
                                     }
 
@@ -291,6 +298,7 @@ fun ProductsScreen(
                 var pName by remember { mutableStateOf("") }
                 var pPurchasePrice by remember { mutableStateOf("") }
                 var pSalePrice by remember { mutableStateOf("") }
+                var pImageUrl by remember { mutableStateOf("") }
                 var isFormScannerActive by remember { mutableStateOf(false) }
                 var errorMessage by remember { mutableStateOf("") }
 
@@ -388,6 +396,15 @@ fun ProductsScreen(
                                     )
                                 }
 
+                                OutlinedTextField(
+                                    value = pImageUrl,
+                                    onValueChange = { pImageUrl = it },
+                                    placeholder = { Text("رابط صورة المنتج (اختياري)...") },
+                                    label = { Text("رابط الصورة") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+
                                 if (errorMessage.isNotEmpty()) {
                                     Text(
                                         text = errorMessage,
@@ -407,6 +424,7 @@ fun ProductsScreen(
                                     val curName = pName.trim()
                                     val buyPrice = pPurchasePrice.toDoubleOrNull()
                                     val sellPrice = pSalePrice.toDoubleOrNull()
+                                    val imgUrl = if (pImageUrl.trim().isEmpty()) null else pImageUrl.trim()
 
                                     if (curBarcode.isEmpty() || curName.isEmpty() || buyPrice == null || sellPrice == null) {
                                         errorMessage = "يرجى تعبئة كافة الحقول بشكل صحيح واحتساب الأسعار!"
@@ -417,7 +435,8 @@ fun ProductsScreen(
                                             curBarcode,
                                             curName,
                                             buyPrice,
-                                            sellPrice
+                                            sellPrice,
+                                            imgUrl
                                         ) { success ->
                                             if (success) {
                                                 showAddDialog = false
@@ -433,6 +452,185 @@ fun ProductsScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { showAddDialog = false }) {
+                            Text("إلغاء")
+                        }
+                    }
+                )
+            }
+
+            // EDIT PRODUCT DIALOG MODAL
+            if (showEditDialog) {
+                var pBarcode by remember { mutableStateOf("") }
+                var pName by remember { mutableStateOf("") }
+                var pPurchasePrice by remember { mutableStateOf("") }
+                var pSalePrice by remember { mutableStateOf("") }
+                var pImageUrl by remember { mutableStateOf("") }
+                var isFormScannerActive by remember { mutableStateOf(false) }
+                var errorMessage by remember { mutableStateOf("") }
+
+                LaunchedEffect(editingProduct) {
+                    editingProduct?.let {
+                        pBarcode = it.barcode
+                        pName = it.name
+                        pPurchasePrice = it.purchasePrice.toString()
+                        pSalePrice = it.salePrice.toString()
+                        pImageUrl = it.imageUrl ?: ""
+                    }
+                }
+
+                AlertDialog(
+                    onDismissRequest = { showEditDialog = false },
+                    title = {
+                        Text(
+                            "تعديل بيانات المنتج",
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    text = {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (isFormScannerActive) {
+                                BarcodeScannerView(
+                                    onBarcodeScanned = { code ->
+                                        pBarcode = code
+                                        isFormScannerActive = false
+                                        viewModel.playBeep()
+                                    }
+                                )
+                                TextButton(
+                                    onClick = { isFormScannerActive = false },
+                                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                                ) {
+                                    Text("إلغاء وتشغيل إدخال يدوي")
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = pBarcode,
+                                        onValueChange = { pBarcode = it },
+                                        placeholder = { Text("كود الباركود (إجباري)") },
+                                        label = { Text("الباركود") },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                    )
+                                    IconButton(
+                                        onClick = { isFormScannerActive = true },
+                                        modifier = Modifier
+                                            .size(52.dp)
+                                            .background(
+                                                MaterialTheme.colorScheme.primaryContainer,
+                                                RoundedCornerShape(10.dp)
+                                            )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CameraAlt,
+                                            contentDescription = "قراءة باركود المنتج بالكاميرا",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+
+                                OutlinedTextField(
+                                    value = pName,
+                                    onValueChange = { pName = it },
+                                    placeholder = { Text("اسم المنتج") },
+                                    label = { Text("اسم المنتج") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = pPurchasePrice,
+                                        onValueChange = { pPurchasePrice = it },
+                                        placeholder = { Text("سعر الشراء") },
+                                        label = { Text("سعر الشراء") },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                                    )
+
+                                    OutlinedTextField(
+                                        value = pSalePrice,
+                                        onValueChange = { pSalePrice = it },
+                                        placeholder = { Text("سعر البيع") },
+                                        label = { Text("سعر البيع") },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                                    )
+                                }
+
+                                OutlinedTextField(
+                                    value = pImageUrl,
+                                    onValueChange = { pImageUrl = it },
+                                    placeholder = { Text("رابط صورة المنتج (اختياري)...") },
+                                    label = { Text("رابط الصورة") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+
+                                if (errorMessage.isNotEmpty()) {
+                                    Text(
+                                        text = errorMessage,
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        if (!isFormScannerActive) {
+                            Button(
+                                onClick = {
+                                    val curBarcode = pBarcode.trim()
+                                    val curName = pName.trim()
+                                    val buyPrice = pPurchasePrice.toDoubleOrNull()
+                                    val sellPrice = pSalePrice.toDoubleOrNull()
+                                    val imgUrl = if (pImageUrl.trim().isEmpty()) null else pImageUrl.trim()
+
+                                    if (curBarcode.isEmpty() || curName.isEmpty() || buyPrice == null || sellPrice == null) {
+                                        errorMessage = "يرجى تعبئة كافة الحقول بشكل صحيح واحتساب الأسعار!"
+                                    } else if (sellPrice < buyPrice) {
+                                        errorMessage = "تحذير: سعر البيع أقل من سعر الشراء (خسارة)!"
+                                    } else {
+                                        editingProduct?.let { original ->
+                                            val updated = original.copy(
+                                                barcode = curBarcode,
+                                                name = curName,
+                                                purchasePrice = buyPrice,
+                                                salePrice = sellPrice,
+                                                imageUrl = imgUrl
+                                            )
+                                            viewModel.updateProduct(updated) { success ->
+                                                if (success) {
+                                                    showEditDialog = false
+                                                    Toast.makeText(context, "تم تحديث المنتج بنجاح!", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text("حفظ التعديلات")
+                            }
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showEditDialog = false }) {
                             Text("إلغاء")
                         }
                     }

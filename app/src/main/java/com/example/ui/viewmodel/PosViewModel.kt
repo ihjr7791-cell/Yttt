@@ -2,6 +2,7 @@ package com.example.ui.viewmodel
 
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.util.Base64
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,6 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 class PosViewModel(private val repository: PosRepository) : ViewModel() {
 
@@ -25,6 +28,10 @@ class PosViewModel(private val repository: PosRepository) : ViewModel() {
 
     // 2. Invoices flow
     val invoices: StateFlow<List<Invoice>> = repository.allInvoices
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // 2b. Invoice Items flow
+    val invoiceItems: StateFlow<List<InvoiceItem>> = repository.getAllInvoiceItemsFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // 3. Current active cart (Product -> Quantity)
@@ -209,6 +216,79 @@ class PosViewModel(private val repository: PosRepository) : ViewModel() {
         }
     }
 
+    // Partial Debt settlement ("تسديد جزئي")
+    fun payPartialDebt(customerName: String, amountToPay: Double, onResult: (Boolean, String) -> Unit = {_,_ ->}) {
+        if (customerName.trim().isEmpty() || amountToPay <= 0.0) {
+            onResult(false, "القيمة غير صالحة")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                // Get all unpaid invoices for this customer, oldest first
+                val customerUnpaid = invoices.value
+                    .filter { !it.isPaid && it.customerName?.equals(customerName.trim(), ignoreCase = true) == true }
+                    .sortedBy { it.timestamp }
+
+                var remainingPayment = amountToPay
+                val currentTime = System.currentTimeMillis()
+
+                for (invoice in customerUnpaid) {
+                    if (remainingPayment <= 0.0) break
+
+                    if (remainingPayment >= invoice.totalAmount) {
+                        // Mark this invoice as fully paid
+                        remainingPayment -= invoice.totalAmount
+                        val updatedInvoice = invoice.copy(
+                            isPaid = true,
+                            timestamp = currentTime
+                        )
+                        repository.insertInvoiceDirectly(updatedInvoice)
+                    } else {
+                        // Partially pay this invoice by splitting it
+                        val originalAmount = invoice.totalAmount
+                        val amountPaid = remainingPayment
+                        val amountUnpaid = originalAmount - amountPaid
+
+                        val ratio = amountPaid / originalAmount
+                        val paidProfit = invoice.totalProfit * ratio
+                        val unpaidProfit = invoice.totalProfit - paidProfit
+
+                        // Update existing unpaid invoice with the remainder
+                        val updatedUnpaidInvoice = invoice.copy(
+                            totalAmount = amountUnpaid,
+                            totalProfit = unpaidProfit
+                        )
+                        repository.insertInvoiceDirectly(updatedUnpaidInvoice)
+
+                        // Create new paid invoice for the paid part to record in revenues
+                        val paidInvoicePart = Invoice(
+                            timestamp = currentTime,
+                            totalAmount = amountPaid,
+                            isPaid = true,
+                            totalProfit = paidProfit,
+                            customerName = customerName.trim()
+                        )
+                        repository.insertInvoiceDirectly(paidInvoicePart)
+
+                        remainingPayment = 0.0
+                    }
+                }
+                onResult(true, "تم تسديد $amountToPay د.ت بنجاح!")
+            } catch (e: Exception) {
+                Log.e("PosViewModel", "Failed to pay partial debt", e)
+                onResult(false, "فشلت عملية السداد الجزئي.")
+            }
+        }
+    }
+
+    // Update Product Info
+    fun updateProduct(product: Product, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            repository.insertProduct(product)
+            onResult(true)
+        }
+    }
+
     // Add Product
     fun addNewProduct(barcode: String, name: String, purchasePrice: Double, salePrice: Double, imageUrl: String? = null, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
@@ -242,6 +322,185 @@ class PosViewModel(private val repository: PosRepository) : ViewModel() {
     fun deleteProductById(productId: Int) {
         viewModelScope.launch {
             repository.deleteProductById(productId)
+        }
+    }
+
+    // Exports all database entries to a single Base64 encoded JSON string
+    fun exportBackupCode(onComplete: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val currentProducts = products.value
+                val currentInvoices = invoices.value
+                val currentItems = repository.getAllInvoiceItems()
+
+                val jsonRoot = JSONObject()
+
+                // 1. Pack Products
+                val pArray = JSONArray()
+                for (p in currentProducts) {
+                    val pObj = JSONObject().apply {
+                        put("barcode", p.barcode)
+                        put("name", p.name)
+                        put("purchasePrice", p.purchasePrice)
+                        put("salePrice", p.salePrice)
+                        put("imageUrl", p.imageUrl ?: "")
+                    }
+                    pArray.put(pObj)
+                }
+                jsonRoot.put("products", pArray)
+
+                // 2. Pack Invoices
+                val invArray = JSONArray()
+                for (i in currentInvoices) {
+                    val iObj = JSONObject().apply {
+                        put("id", i.id)
+                        put("timestamp", i.timestamp)
+                        put("totalAmount", i.totalAmount)
+                        put("isPaid", i.isPaid)
+                        put("customerName", i.customerName ?: "")
+                        put("totalProfit", i.totalProfit)
+                    }
+                    invArray.put(iObj)
+                }
+                jsonRoot.put("invoices", invArray)
+
+                // 3. Pack Invoice Items
+                val itemArray = JSONArray()
+                for (item in currentItems) {
+                    val itemObj = JSONObject().apply {
+                        put("invoiceId", item.invoiceId)
+                        put("productBarcode", item.productBarcode)
+                        put("productName", item.productName)
+                        put("purchasePrice", item.purchasePrice)
+                        put("salePrice", item.salePrice)
+                        put("quantity", item.quantity)
+                    }
+                    itemArray.put(itemObj)
+                }
+                jsonRoot.put("invoiceItems", itemArray)
+
+                val jsonStr = jsonRoot.toString()
+                val base64Code = Base64.encodeToString(jsonStr.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+                onComplete(base64Code)
+            } catch (e: Exception) {
+                Log.e("PosViewModel", "Export failed", e)
+                onComplete("")
+            }
+        }
+    }
+
+    // Decodes and restores database entries from Base64 JSON and overwrites local tables
+    fun importBackupCode(backupCode: String, onComplete: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                if (backupCode.trim().isEmpty()) {
+                    onComplete(false, "الرجاء إدخال كود نسخ احتياطي صالح!")
+                    return@launch
+                }
+                val decodedBytes = Base64.decode(backupCode.trim(), Base64.NO_WRAP)
+                val jsonStr = String(decodedBytes, Charsets.UTF_8)
+                val jsonRoot = JSONObject(jsonStr)
+
+                // Clear everything first
+                repository.clearAllData()
+
+                // 1. Restore products
+                val pArray = jsonRoot.optJSONArray("products")
+                if (pArray != null) {
+                    for (i in 0 until pArray.length()) {
+                        val pObj = pArray.getJSONObject(i)
+                        repository.insertProduct(
+                            Product(
+                                barcode = pObj.getString("barcode"),
+                                name = pObj.getString("name"),
+                                purchasePrice = pObj.getDouble("purchasePrice"),
+                                salePrice = pObj.getDouble("salePrice"),
+                                imageUrl = if (pObj.has("imageUrl") && pObj.getString("imageUrl").isNotEmpty()) pObj.getString("imageUrl") else null
+                            )
+                        )
+                    }
+                }
+
+                // 2. Restore invoices
+                val invArray = jsonRoot.optJSONArray("invoices")
+                if (invArray != null) {
+                    for (i in 0 until invArray.length()) {
+                        val iObj = invArray.getJSONObject(i)
+                        repository.insertInvoiceDirectly(
+                            Invoice(
+                                id = iObj.getInt("id"),
+                                timestamp = iObj.getLong("timestamp"),
+                                totalAmount = iObj.getDouble("totalAmount"),
+                                isPaid = iObj.getBoolean("isPaid"),
+                                customerName = if (iObj.has("customerName") && iObj.getString("customerName").isNotEmpty()) iObj.getString("customerName") else null,
+                                totalProfit = iObj.getDouble("totalProfit")
+                            )
+                        )
+                    }
+                }
+
+                // 3. Restore invoice items
+                val itemArray = jsonRoot.optJSONArray("invoiceItems")
+                if (itemArray != null) {
+                    for (i in 0 until itemArray.length()) {
+                        val itemObj = itemArray.getJSONObject(i)
+                        repository.insertInvoiceItemDirectly(
+                            InvoiceItem(
+                                invoiceId = itemObj.getInt("invoiceId"),
+                                productBarcode = itemObj.getString("productBarcode"),
+                                productName = itemObj.getString("productName"),
+                                purchasePrice = itemObj.getDouble("purchasePrice"),
+                                salePrice = itemObj.getDouble("salePrice"),
+                                quantity = itemObj.getInt("quantity")
+                            )
+                        )
+                    }
+                }
+
+                onComplete(true, "تمت استعادة كافة البيانات (${pArray?.length() ?: 0} منتجات، ${invArray?.length() ?: 0} فواتير) بنجاح!")
+            } catch (e: Exception) {
+                Log.e("PosViewModel", "Import failed", e)
+                onComplete(false, "فشل الاستعادة: نسق الكود تالف أو غير مدعوم!")
+            }
+        }
+    }
+
+    // Direct manual debt calculation/addition for clients
+    fun addManualDebt(customerName: String, amount: Double, onResult: (Boolean) -> Unit) {
+        addManualDebtWithDetails(customerName, amount, "", onResult)
+    }
+
+    // Direct manual debt with comments/details
+    fun addManualDebtWithDetails(customerName: String, amount: Double, details: String, onResult: (Boolean) -> Unit) {
+        if (customerName.trim().isEmpty() || amount <= 0.0) {
+            onResult(false)
+            return
+        }
+        viewModelScope.launch {
+            val invoice = Invoice(
+                timestamp = System.currentTimeMillis(),
+                totalAmount = amount,
+                isPaid = false,
+                totalProfit = 0.0, // Manual custom debts are registered with zero default profit
+                customerName = customerName.trim()
+            )
+            val itemsToSave = if (details.trim().isNotEmpty()) {
+                listOf(
+                    InvoiceItem(
+                        invoiceId = 0,
+                        productBarcode = "MANUAL",
+                        productName = details.trim(),
+                        purchasePrice = 0.0,
+                        salePrice = amount,
+                        quantity = 1
+                    )
+                )
+            } else {
+                emptyList()
+            }
+            // Save inside database as an unpaid transaction under the customer's name
+            repository.insertInvoice(invoice, itemsToSave)
+            onResult(true)
         }
     }
 }

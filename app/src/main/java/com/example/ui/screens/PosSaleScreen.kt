@@ -44,6 +44,14 @@ fun PosSaleScreen(
     val context: Context = LocalContext.current
     val cart by viewModel.cart.collectAsState()
     val products by viewModel.products.collectAsState()
+    val invoices by viewModel.invoices.collectAsState()
+
+    val existingCustomers = remember(invoices) {
+        invoices.mapNotNull { it.customerName }
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+    }
 
     var isScannerActive by remember { mutableStateOf(false) }
     var manualBarcode by remember { mutableStateOf("") }
@@ -309,7 +317,7 @@ fun PosSaleScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(240.dp)
+                            .height(160.dp)
                             .clip(RoundedCornerShape(20.dp)),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
@@ -324,18 +332,18 @@ fun PosSaleScreen(
                             )
                             // Visual guides overlay to focus scanning target for user
                             Box(
-                                modifier = Modifier.fillMaxSize().padding(16.dp),
+                                modifier = Modifier.fillMaxSize().padding(12.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(width = 240.dp, height = 120.dp)
+                                        .size(width = 200.dp, height = 80.dp)
                                         .border(2.dp, Color.Red.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
                                         .background(Color.Red.copy(alpha = 0.03f))
                                 )
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxWidth(0.65f)
+                                        .fillMaxWidth(0.55f)
                                         .height(2.dp)
                                         .background(Color.Red.copy(alpha = 0.8f))
                                 )
@@ -346,14 +354,15 @@ fun PosSaleScreen(
                                 onClick = { isScannerActive = false },
                                 modifier = Modifier
                                     .align(Alignment.TopStart)
-                                    .padding(12.dp)
-                                    .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                                    .padding(8.dp)
+                                    .size(28.dp)
+                                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "إلغاء",
                                     tint = Color.White,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
                         }
@@ -583,7 +592,7 @@ fun PosSaleScreen(
                     },
                     text = {
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
@@ -592,13 +601,53 @@ fun PosSaleScreen(
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                 lineHeight = 20.sp
                             )
+
+                            // Quick suggestion chips of existing customers
+                            if (existingCustomers.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        "اختر من الزبائن الحاليين المتاحين:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 100.dp)
+                                    ) {
+                                        androidx.compose.foundation.lazy.grid.LazyHorizontalGrid(
+                                            rows = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.fillMaxWidth().height(80.dp)
+                                        ) {
+                                            items(existingCustomers.size) { index ->
+                                                val name = existingCustomers[index]
+                                                AssistChip(
+                                                    onClick = {
+                                                        customerName = name
+                                                        localError = ""
+                                                    },
+                                                    label = { Text(name, fontSize = 12.sp) },
+                                                    colors = AssistChipDefaults.assistChipColors(
+                                                        containerColor = if (customerName == name) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             OutlinedTextField(
                                 value = customerName,
                                 onValueChange = {
                                     customerName = it
                                     if (it.isNotEmpty()) localError = ""
                                 },
-                                placeholder = { Text("اسم الزبون (مثال: محمد الباجي)...", fontSize = 13.sp) },
+                                placeholder = { Text("أو اكتب اسم زبون جديد (مثال: منصف)...", fontSize = 13.sp) },
+                                label = { Text("اسم الزبون") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 shape = RoundedCornerShape(14.dp),
@@ -606,6 +655,7 @@ fun PosSaleScreen(
                                     focusedBorderColor = MaterialTheme.colorScheme.primary
                                 )
                             )
+
                             if (localError.isNotEmpty()) {
                                 Text(
                                     text = localError,
@@ -622,7 +672,7 @@ fun PosSaleScreen(
                                 if (customerName.trim().isEmpty()) {
                                     localError = "الرجاء إدخال اسم الزبون لتسجيل الكريدي!"
                                 } else {
-                                    viewModel.checkoutWithCredit(customerName) {
+                                    viewModel.checkoutWithCredit(customerName.trim()) {
                                         showCreditDialog = false
                                         Toast.makeText(context, "تم تسجيل الدين لـ $customerName بنجاح!", Toast.LENGTH_LONG).show()
                                         statusMessage = "تم حفظ الكريدي باسم: $customerName"
