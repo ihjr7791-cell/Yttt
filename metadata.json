@@ -1,0 +1,6 @@
+{
+  "name": "الكاشير الذكي",
+  "description": "تطبيق نقاط بيع وكاشير ذكي متكامل باللغة العربية بالكامل مع دعم مسح الباركود بالكاميرا، وقاعدة بيانات محلية سريعة لحساب المبيعات والأرباح وإدارة ديون الكريدي.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

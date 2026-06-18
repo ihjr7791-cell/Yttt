@@ -1,0 +1,46 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Base cash register chassis -->
+    <path
+        android:fillColor="#00A86B"
+        android:pathData="M 30,72 L 78,72 L 78,78 L 30,78 Z" />
+
+    <!-- Main terminal screen and buttons body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 34,46 L 74,46 L 76,70 L 32,70 Z" />
+
+    <!-- Terminal Screen inner display (dark slate) -->
+    <path
+        android:fillColor="#0B251A"
+        android:pathData="M 38,50 L 70,50 L 68,62 L 40,62 Z" />
+
+    <!-- Keyboard register drawer gold & green action buttons -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M 45,72 A 3,3 0 1,1 39,72 A 3,3 0 1,1 45,72 Z" />
+
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M 57,72 A 3,3 0 1,1 51,72 A 3,3 0 1,1 57,72 Z" />
+
+    <!-- Scanning barcode light line (Crimson Rose Laser) -->
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M 24,40 L 84,40 L 84,42 L 24,42 Z" />
+
+    <!-- Scanner light halo glow -->
+    <path
+        android:fillColor="#EF4444"
+        android:fillAlpha="0.25"
+        android:pathData="M 24,36 L 84,36 L 84,46 L 24,46 Z" />
+
+    <!-- Upward rising business statistics trend arrow -->
+    <path
+        android:fillColor="#34D399"
+        android:pathData="M 64,28 L 76,28 L 76,40 L 72,36 L 56,52 L 48,44 L 36,56 L 32,52 L 48,36 L 56,44 L 68,32 Z" />
+</vector>
