@@ -4,6 +4,7 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
@@ -13,6 +14,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.rememberAsyncImagePainter
+import java.io.File
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -442,6 +446,39 @@ fun PosSaleScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
+                                    // Product Image Block
+                                    if (!product.imageUrl.isNullOrEmpty()) {
+                                        Image(
+                                            painter = rememberAsyncImagePainter(
+                                                File(product.imageUrl)
+                                            ),
+                                            contentDescription = product.name,
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .background(
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                                    RoundedCornerShape(8.dp)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = if (product.name.isNotEmpty()) product.name.take(1).uppercase() else "P",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 18.sp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
                                     // [Right Block] Product Description Info
                                     Column(
                                         modifier = Modifier.weight(1.2f),
